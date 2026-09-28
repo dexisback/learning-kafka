@@ -10,3 +10,6 @@
     > 8: producer relibility: experiment with acks/retries/idempotent producer/batching and compression
     > 9: retention + replay
     > 10: mock backend/apis and hence test it with a real microservice (have order-service, analytics-service, notification-service as three different microservies. all of em being separate individual topic)
+
+
+    

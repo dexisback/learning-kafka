@@ -42,14 +42,38 @@ func main() {
 			Item:     "pasta",
 			Quantity: 2,
 		}, //adding multiple orders
-		//adding some more users, with the same name, so that we can test out newly added o.User for routing instead of 
+		//adding some more users, with the same name, so that we can test out newly added o.User for routing instead of
+		{
+			OrderID:  "order-5",
+			User:     "AmaanDaGreatest",
+			Item:     "karela",
+			Quantity: 3,
+		},
+		{
+			OrderID:  "order-6",
+			User:     "AmaanDaGreatest",
+			Item:     "baigan",
+			Quantity: 3,
+		},
+		{
+			OrderID:  "order-7",
+			User:     "AmaanDaGreatest",
+			Item:     "achar",
+			Quantity: 2,
+		},
 	}
 
 	writer := &kafka.Writer{
 		Addr:     kafka.TCP("localhost:9092"),
 		Topic:    "orders",
 		Balancer: &kafka.LeastBytes{},
+
+
+		RequiredAcks: kafka.RequireAll,  //means the producer waits for acknowledgment from client/broker configuration rather than treating the send as successful immediately 
+		Async: false,
+		MaxAttempts: 5, //allows the client to retry a failed write up to its configured attempt limit.
 	}
+
 
 	defer writer.Close()
 
