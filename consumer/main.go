@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+
 	"github.com/segmentio/kafka-go"
 )
 
@@ -17,18 +18,16 @@ func main() {
 
 	defer reader.Close()
 
-
-
 	fmt.Println("consumer started rahhh....")
 	//groupID order-track is equivalent of Group.id = order-tracker
 
 	//now continously read:
 	for {
 		message, err := reader.ReadMessage(context.Background())
-		if err != nil{
+		if err != nil {
 			panic(err)
 		}
 
-		fmt.Println("received msg: offset = %d value=%s\n", message.Offset, string(message.Value))
+		fmt.Printf("partition=%d , received msg: offset = %d value=%s\n", message.Partition, message.Offset, string(message.Value))
 	}
 }
