@@ -6,23 +6,24 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/dexisback/learning-kafka/internal/config"
 	"github.com/dexisback/learning-kafka/internal/event"
 	"github.com/segmentio/kafka-go"
 )
 
 func main() {
-	// reader := kafka.NewReader(kafka.ReaderConfig{
-	// 	Brokers: []string{"localhost:9092"},
-	// 	Topic:   "orders",
-	// 	GroupID: "order-processors",
-	// })
 	ctx := context.Background()
 
-	conn, err := pgx.Connect(ctx, "postgres://postgres:postgres@localhost:5432/orders")
+	shutdownCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	conn, err := pgx.Connect(ctx, config.Get("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/orders"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -33,29 +34,32 @@ func main() {
 	}
 
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers: []string{"localhost:9092"},
-		Topic:   "orders",
+		Brokers: []string{config.Get("KAFKA_BROKERS", "localhost:9092")},
+		Topic:   config.Get("KAFKA_TOPIC", "orders"),
 		// GroupID:     "order-processors",
-		GroupID:     "performance-test",
-		StartOffset: kafka.LastOffset,
+		GroupID:     "orders-processor",
+		StartOffset: kafka.FirstOffset,
 		MinBytes:    1,
 		MaxBytes:    10e6,
 	})
 
 	defer reader.Close()
 
-	workerID := os.Getenv("WORKER_ID")
+	workerID := config.Get("WORKER_ID", "")
 	if workerID == "" {
 		host, _ := os.Hostname()
-		workerID = fmt.Sprintf("%s-pid%d", host, os.Getpid()) // unique per process
+		workerID = fmt.Sprintf("%s-pid%d", host, os.Getpid())
 	}
 
 	fmt.Println("rrahhhhh....starting order worker")
 
 	for {
-		message, err := reader.FetchMessage(ctx)
+		message, err := reader.FetchMessage(shutdownCtx)
 		if err != nil {
-			// transient errors (rebalances, broker blips) must not kill the worker
+			if shutdownCtx.Err() != nil {
+				log.Println("shutdown signal received, stopping worker")
+				break
+			}
 			log.Printf("fetch failed: %v", err)
 			continue
 		}
@@ -63,7 +67,6 @@ func main() {
 		var order event.OrderCreated
 		if err := json.Unmarshal(message.Value, &order); err != nil {
 			log.Printf("skipping undecodable message (partition=%d offset=%d): %v", message.Partition, message.Offset, err)
-			// commit the poison message explicitly so it is not redelivered forever
 			if commitErr := reader.CommitMessages(ctx, message); commitErr != nil {
 				log.Printf("commit failed: %v", commitErr)
 			}
@@ -79,9 +82,6 @@ func main() {
 		)
 
 		// ADD: persist the Kafka event into PostgreSQL
-		// a failed insert must NEVER be skipped: a later commit would leapfrog
-		// this offset forever and the row would be lost. retry a few times,
-		// then stop WITHOUT committing so the message is redelivered on restart
 		inserted := false
 		for attempt := 1; attempt <= 5; attempt++ {
 			_, err = conn.Exec(

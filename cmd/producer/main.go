@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/dexisback/learning-kafka/internal/config"
 	"github.com/dexisback/learning-kafka/internal/event"
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
@@ -20,12 +21,12 @@ func main() {
 	flag.Parse()
 
 	writer := &kafka.Writer{
-		Addr:         kafka.TCP("localhost:9092"),
-		Topic:        "orders",
+		Addr:         kafka.TCP(config.Get("KAFKA_BROKERS", "localhost:9092")),
+		Topic:        config.Get("KAFKA_TOPIC", "orders"),
 		Balancer:     &kafka.Hash{},         //this gives us actual batching while still flushing quickly
 		BatchSize:    1,                     // or sized ≥ count
 		BatchTimeout: 10 * time.Millisecond, // flush fast instead of waiting 10s
-		Async:        false,                  // or keep sync but pass the whole slice. async me data was getting lost . reason -- With async writes, WriteMessages() can return before Kafka has acknowledged the messages. When your producer program exits, outstanding async writes may not all have completed.
+		Async:        false,                 // or keep sync but pass the whole slice. async me data was getting lost . reason -- With async writes, WriteMessages() can return before Kafka has acknowledged the messages. When your producer program exits, outstanding async writes may not all have completed.
 
 	}
 
