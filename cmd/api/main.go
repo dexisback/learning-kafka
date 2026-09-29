@@ -107,11 +107,10 @@ func main() {
 	//syscall.SIGINT (Interrupt): Triggered when a user presses Ctrl+C in the terminal attached to the process.
 	//syscall.SIGTERM (Terminate): The standard signal sent by container runtimes (like Docker via docker stop or Kubernetes) asking a process to shut down politely.
 	//Note: SIGKILL or docker kill cannot be caught or handled; they terminate the app immediately).
-	
-	<-stop    //<-stop acts as a roadblock. The main program pauses on this exact line indefinitely until it catches a SIGINT or SIGTERM
+
+	<-stop //<->stop acts as a roadblock. The main program pauses on this exact line indefinitely until it catches a SIGINT or SIGTERM
 
 	log.Println("shutting down API....")
-
 
 	// /Once a signal arrives, the roadblock lifts. The code creates a 5-second timeout context and calls server.Shutdown(). This stops accepting new connections but gives existing connections up to 5 seconds to finish their work before the program finally exits.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

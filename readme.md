@@ -1,6 +1,4 @@
-# kafka-practice:
-
-This document is less of a professinal crisp readme, and more of a mixed personal revisional doc + guide/readme
+# kafka-practice
 
 A small, event-driven order backend in Go, built around Apache Kafka. An HTTP API accepts orders, publishes `OrderCreated` events to a Kafka topic, and three independent consumer services process the same event stream in parallel — one persisting orders to PostgreSQL, one aggregating analytics, one simulating notifications.
 
@@ -90,7 +88,7 @@ Balancer: &kafka.Hash{}
 Key:      []byte(order.UserID)
 ```
 
-Every event for `user-42` hashes to the same partition, so that user's events stay ordered. Different users may share a partition; that's fine. A earlier load-based balancer (`LeastBytes`) was deliberately replaced: it balances by bytes but destroys key-to-partition stability.
+Every event for `user-42` hashes to the same partition, so that user's events stay ordered. Different users may share a partition; that's fine. An earlier load-based balancer (`LeastBytes`) was deliberately replaced: it balances by bytes but destroys key-to-partition stability.
 
 There are two distinct "balancing" problems, and Kafka solves them at different layers:
 
