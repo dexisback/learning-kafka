@@ -68,6 +68,7 @@ services:
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:29092}
       KAFKA_TOPIC: ${KAFKA_TOPIC:-orders}
       API_ADDR: ${API_ADDR:-:8080}
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/orders}
 
 
   order-worker:
@@ -113,6 +114,16 @@ services:
     environment:
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:29092}
       KAFKA_TOPIC: ${KAFKA_TOPIC:-orders}
+
+  web:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+    depends_on:
+      - api
 
 
 volumes:

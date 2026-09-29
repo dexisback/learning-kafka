@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kafka Order Dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/css/geist-mono@latest/400.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/css/geist-mono@latest/500.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/css/geist-mono@latest/600.css">
+<style>
+  :root {
+    --bg: #fafafa; --card: #ffffff; --border: #e5e5e5; --text: #0a0a0a;
+    --muted: #6b7280; --hover: #f5f5f5;
+    --accent: #0a0a0a; --accent-text: #ffffff;
+    --ok: #16a34a; --bad: #dc2626;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
+    --btn-shadow: 0 1px 2px rgba(0,0,0,.35), 0 6px 16px rgba(0,0,0,.18);
+  }
+  html.dark {
+    --bg: #0a0a0a; --card: #141414; --border: #262626; --text: #fafafa;
+    --muted: #8b8b8b; --hover: #1c1c1c;
+    --accent: #fafafa; --accent-text: #0a0a0a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    --btn-shadow: 0 1px 2px rgba(0,0,0,.6), 0 6px 16px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.5 "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    transition: background .2s, color .2s;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 36px 20px 72px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; box-shadow: var(--shadow); margin-bottom: 16px;
+    transition: background .2s, border-color .2s;
+  }
+  header.card { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  h1 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; margin: 0; }
+  .sub { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  h2 { font-size: 12px; font-weight: 600; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--border); background: var(--hover);
+    border-radius: 999px; padding: 5px 11px; font-size: 11px; white-space: nowrap;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
+  button {
+    appearance: none; border: none; background: var(--accent); color: var(--accent-text);
+    font: inherit; font-weight: 500; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    box-shadow: var(--btn-shadow); transition: opacity .15s, transform .05s;
+  }
+  button:hover { opacity: .86; } button:active { transform: translateY(1px); }
+  button.ghost { background: transparent; color: var(--text); box-shadow: none; border: 1px solid var(--border); }
+  button.ghost:hover { background: var(--hover); opacity: 1; }
+  input {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font: inherit; width: 100%; outline: none;
+    transition: border-color .15s;
+  }
+  input:focus { border-color: var(--muted); }
+  .form { display: grid; grid-template-columns: 1fr 1fr 96px auto; gap: 10px; }
+  @media (max-width: 640px) { .form { grid-template-columns: 1fr 1fr; } .grid3 { grid-template-columns: 1fr; } }
+  .msg { margin-top: 10px; font-size: 11px; min-height: 15px; color: var(--muted); }
+  .msg.ok { color: var(--ok); } .msg.bad { color: var(--bad); }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
+  .stat .v { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+  .stat .l { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .feed { display: flex; flex-direction: column; }
+  .feed-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .feed-item:last-child { border-bottom: none; }
+  .tag {
+    border: 1px solid var(--border); background: var(--hover); border-radius: 6px;
+    padding: 2px 8px; font-size: 11px; color: var(--muted); flex: none;
+  }
+  .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .time { color: var(--muted); font-size: 11px; flex: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--border); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  .empty { color: var(--muted); padding: 10px 0; font-size: 11px; }
+  footer { color: var(--muted); font-size: 11px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="card">
+    <div>
+      <h1>Kafka Order Dashboard</h1>
+      <div class="sub">api :8080 &nbsp;·&nbsp; topic <b id="topicName">orders</b> &nbsp;·&nbsp; <span id="partitions">?</span> partitions</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span class="badge"><span class="dot" id="statusDot"></span><span id="statusText">checking…</span></span>
+      <button class="ghost" id="themeBtn" type="button">theme</button>
+    </div>
+  </header>
+
+  <div class="grid3">
+    <div class="card stat"><div class="v" id="statOrders">—</div><div class="l">orders in postgres</div></div>
+    <div class="card stat"><div class="v" id="statTopic">—</div><div class="l">events in kafka</div></div>
+    <div class="card stat"><div class="v" id="statPublished">—</div><div class="l">published by this api</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Create order</h2>
+    <form class="form" id="createForm">
+      <input id="fUser" placeholder="user_id" value="user-42" required>
+      <input id="fItem" placeholder="item" value="laptop" required>
+      <input id="fQty" type="number" min="1" value="1" required>
+      <button type="submit">create order</button>
+    </form>
+    <div class="msg" id="createMsg">POST /orders → kafka</div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <h2 style="margin:0">recent events</h2>
+      <button class="ghost" id="refreshBtn" type="button">refresh</button>
+    </div>
+    <div class="feed" id="events" style="margin-top:12px"><div class="empty">loading…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>orders in postgres</h2>
+    <div id="ordersTable"></div>
+  </div>
+
+  <footer id="footer">kafka — · postgres —</footer>
+
+</div>
+
+<script>
+const API = `${location.protocol}//${location.hostname || 'localhost'}:8080`;
+const $ = (id) => document.getElementById(id);
+
+/* theme: light default, charcoal dark, persisted */
+if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
+$('themeBtn').onclick = () => {
+  const dark = document.documentElement.classList.toggle('dark');
+  localStorage.setItem('theme', dark ? 'dark' : 'light');
+};
+
+async function api(path, options) {
+  const res = await fetch(API + path, options);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+const timeFmt = (iso) => new Date(iso).toLocaleTimeString([], { hour12: false });
+
+/* ---------- create order ---------- */
+$('createForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = $('createMsg');
+  msg.className = 'msg';
+  msg.textContent = 'publishing…';
+  try {
+    const order = await api('/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: $('fUser').value.trim(),
+        item: $('fItem').value.trim(),
+        quantity: Number($('fQty').value),
+      }),
+    });
+    msg.className = 'msg ok';
+    msg.textContent = `✓ created — event ${order.event_id.slice(0, 8)}… · order ${order.order_id.slice(0, 8)}…`;
+    refresh();
+  } catch (err) {
+    msg.className = 'msg bad';
+    msg.textContent = '✗ publish failed: ' + err.message;
+  }
+});
+
+/* ---------- rendering ---------- */
+function renderHealth(h) {
+  const ok = h.status === 'ok';
+  $('statusDot').className = 'dot ' + (ok ? 'ok' : 'bad');
+  $('statusText').textContent = ok ? 'healthy' : 'degraded';
+  $('topicName').textContent = h.topic;
+  $('partitions').textContent = h.partitions;
+  $('footer').textContent =
+    `kafka ${h.kafka} · postgres ${h.postgres} · GET /health · GET /stats · GET /events · GET /orders`;
+}
+
+function renderStats(s) {
+  $('statOrders').textContent = s.orders_in_db;
+  $('statTopic').textContent = s.topic_events;
+  $('statPublished').textContent = s.events_published;
+}
+
+function renderEvents(events) {
+  const feed = $('events');
+  feed.textContent = '';
+  if (!events.length) {
+    feed.append(el('div', 'empty', 'no events retained yet'));
+    return;
+  }
+  for (const ev of events.slice(0, 12)) {
+    const row = el('div', 'feed-item');
+    row.append(
+      el('span', 'tag', `P${ev.partition}`),
+      el('span', 'tag', `#${ev.offset}`),
+      el('span', 'what', `${ev.user_id} · ${ev.item} × ${ev.quantity}`),
+      el('span', 'time', timeFmt(ev.created_at)),
+    );
+    feed.append(row);
+  }
+}
+
+function renderOrders(orders) {
+  const holder = $('ordersTable');
+  holder.textContent = '';
+  const table = document.createElement('table');
+
+  const head = document.createElement('tr');
+  for (const label of ['order_id', 'user', 'item', 'qty', 'created_at']) head.append(el('th', null, label));
+  table.append(head);
+
+  if (!orders.length) {
+    const tr = document.createElement('tr');
+    const td = el('td', 'empty', 'no orders yet');
+    td.colSpan = 5;
+    tr.append(td);
+    table.append(tr);
+  }
+
+  for (const o of orders) {
+    const tr = document.createElement('tr');
+    for (const v of [o.order_id.slice(0, 13) + '…', o.user_id, o.item, String(o.quantity), timeFmt(o.created_at)]) {
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.append(td);
+    }
+    table.append(tr);
+  }
+  holder.append(table);
+}
+
+/* ---------- polling ---------- */
+async function refresh() {
+  try {
+    const [health, stats, events, orders] = await Promise.all([
+      api('/health'),
+      api('/stats'),
+      api('/events'),
+      api('/orders'),
+    ]);
+    renderHealth(health);
+    renderStats(stats);
+    renderEvents(events);
+    renderOrders(orders);
+  } catch (err) {
+    $('statusDot').className = 'dot bad';
+    $('statusText').textContent = 'api unreachable';
+  }
+}
+
+refresh();
+setInterval(refresh, 4000);
+$('refreshBtn').onclick = refresh;
+</script>
+</body>
+</html>

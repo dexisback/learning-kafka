@@ -52,6 +52,7 @@ The same image contains all four service binaries; Docker Compose decides which 
 | `cmd/order-worker` | `orders-processor` | Persists every event to PostgreSQL, then commits the Kafka offset. |
 | `cmd/analytics` | `analytics-processor` | Consumes independently, maintains in-memory order counters. |
 | `cmd/notifications` | `notifications-processor` | Consumes independently, simulates notification delivery. |
+| `web/` (nginx) | — | Static dashboard on `:3000` — create orders, watch the live event log, inspect PostgreSQL rows, check service health. |
 | `cmd/producer` | — | CLI load generator (not part of the runtime stack). Kept for benchmarks and replay experiments. |
 
 Infrastructure: a single Kafka broker in KRaft mode (no ZooKeeper), a PostgreSQL 17 database, all wired through Docker Compose.
@@ -132,13 +133,25 @@ cp .env.example .env    # then fill in the secrets
 docker compose up -d --build
 ```
 
-This starts six containers: `kafka`, `postgres`, and the four Go services (`api`, `order-worker`, `analytics`, `notifications`). Kafka and PostgreSQL expose healthchecks; the Go services are gated on `service_healthy` and restarted on failure, so startup races between the broker, the database, and the apps are handled by Compose rather than luck.
+This starts seven containers: `kafka`, `postgres`, the four Go services (`api`, `order-worker`, `analytics`, `notifications`), and the static dashboard (`web`). Kafka and PostgreSQL expose healthchecks; the Go services are gated on `service_healthy` and restarted on failure, so startup races between the broker, the database, and the apps are handled by Compose rather than luck.
 
 Verify:
 
 ```bash
 docker compose ps
+```
 
+The dashboard is served at **http://localhost:3000** (plain HTML/CSS/JS in `web/index.html`, no build step). It talks to the API on `:8080`:
+
+```text
+POST /orders   create an order            GET /health   kafka + postgres liveness
+GET  /orders   last 50 orders from the DB GET /stats    row/event counters
+GET  /events   most recent events still retained in the Kafka log
+```
+
+Create an order through the API (or the dashboard form):
+
+```bash
 curl -X POST localhost:8080/orders \
   -H 'Content-Type: application/json' \
   -d '{"user_id":"user-42","item":"laptop","quantity":1}'
