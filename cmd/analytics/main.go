@@ -20,10 +20,13 @@ func main() {
 	defer stop()
 
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:     []string{config.Get("KAFKA_BROKERS", "localhost:9092")},
-		Topic:       config.Get("KAFKA_TOPIC", "orders"),
-		GroupID:     "analytics-processor",
-		StartOffset: kafka.FirstOffset,
+		Brokers: []string{config.Get("KAFKA_BROKERS", "localhost:9092")},
+		Topic:   config.Get("KAFKA_TOPIC", "orders"),
+		// Distinct group so analytics receives its own copy of every event.
+		GroupID: "analytics-processor",
+		// Applies ONLY to partitions with no committed offset (fresh group or
+		// clean test run). Groups with committed offsets always resume there.
+		StartOffset: config.StartOffset(),
 		MinBytes:    1,
 		MaxBytes:    10e6,
 	})

@@ -8,30 +8,33 @@ The project exists to make Kafka's core mechanics — partitions, offsets, consu
 
 ## Architecture
 
-```text
-                           Client
-                             │
-                             │ POST /orders
-                             ▼
-                     ┌───────────────┐
-                     │    Go API     │
-                     └───────┬───────┘
-                             │ OrderCreated (key = user_id)
-                             ▼
-                     ┌───────────────┐
-                     │     Kafka     │
-                     │  topic: orders│
-                     │  6 partitions │
-                     └───────┬───────┘
-                             │
-             ┌───────────────┼────────────────┐
-             ▼               ▼                ▼
-    orders-processor  analytics-processor  notifications-processor
-      (consumer         (consumer           (consumer
-         group)             group)              group)
-             │               │                │
-             ▼               ▼                ▼
-        PostgreSQL       counters/logs    simulated delivery
+```mermaid
+flowchart TD
+    C(["Client"]) -->|"POST /orders"| API["Go API<br><i>cmd/api</i>"]
+    API -->|"publishes OrderCreated<br><b>key = user_id</b>"| K["Kafka<br>topic: orders · 6 partitions"]
+
+    K -->|"own copy of every event"| GROUPS
+
+    subgraph GROUPS["3 independent consumer groups"]
+        direction LR
+        W["orders-processor<br><i>cmd/order-worker</i>"]
+        AN["analytics-processor<br><i>cmd/analytics</i>"]
+        NO["notifications-processor<br><i>cmd/notifications</i>"]
+    end
+
+    W --> PG[("PostgreSQL")]
+    AN --> CT["counters / logs"]
+    NO --> SD["simulated delivery"]
+
+    classDef producer fill:#e8f0fe,stroke:#1a73e8,color:#1a2b4a
+    classDef broker fill:#1f1f1f,stroke:#1f1f1f,color:#ffffff
+    classDef consumer fill:#e6f4ea,stroke:#188038,color:#0d3320
+    classDef sink fill:#fef7e0,stroke:#f9ab00,color:#5f4700
+
+    class API producer
+    class K broker
+    class W,AN,NO consumer
+    class PG,CT,SD sink
 ```
 
 - The API never talks to the consumers. It publishes an event and returns; Kafka decouples the two sides.
@@ -149,6 +152,23 @@ docker exec kafka-postgres psql -U postgres -d orders -c 'SELECT count(*) FROM o
 
 Note: `schema.sql` is mounted into `/docker-entrypoint-initdb.d/` and runs only when PostgreSQL initializes a **fresh** volume. If you reset volumes, the schema is created automatically; against an existing volume it must be applied manually.
 
+### Clean test runs: starting consumer groups from the beginning
+
+For an end-to-end test you usually want every service to see every event from offset 0. Two things decide where a group starts:
+
+- A group **with committed offsets** always resumes from them — that is the failure-recovery behavior, and it is never overridden by configuration.
+- A group **without committed offsets** (fresh group, or after a reset) starts at `KAFKA_START_OFFSET`: `first` (default) reads the whole topic from the beginning, `last` skips the backlog and consumes only new events.
+
+To run a clean test from the beginning, either wipe the state (`docker compose down -v`) or reset only the group offsets and restart the consumers:
+
+```bash
+for g in orders-processor analytics-processor notifications-processor; do
+  docker exec kafka kafka-consumer-groups --bootstrap-server localhost:9092 \
+    --group $g --reset-offsets --to-earliest --topic orders --execute
+done
+docker compose restart order-worker analytics notifications
+```
+
 ---
 
 ## Running services on the host (development mode)
@@ -173,12 +193,15 @@ All values come from the environment with sane fallbacks (`internal/config`); no
 |---|---|---|---|
 | `KAFKA_BROKERS` | all services | `localhost:9092` | `kafka:29092` |
 | `KAFKA_TOPIC` | all | `orders` | `orders` |
+| `KAFKA_START_OFFSET` | the three consumers | `first` | `${KAFKA_START_OFFSET:-first}` |
 | `DATABASE_URL` | order-worker | `postgres://…@localhost:5432/orders` | `postgres://…@postgres:5432/orders` |
 | `API_ADDR` | api | `:8080` | `:8080` |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | postgres container | — | from `.env` |
 | `WORKER_ID` | order-worker | hostname-pid | hostname-pid |
 
 Consumer group IDs (`orders-processor`, `analytics-processor`, `notifications-processor`) are intentionally **not** configurable: group identity is what separates the three services, and a shared variable would let one misconfiguration silently merge them into a single group.
+
+`KAFKA_START_OFFSET` is the one shared consumer knob, and it is safe to change: it only decides where a group starts when it has **no committed offset** (a fresh group, or after a volume reset). Groups that already committed offsets always resume from those offsets, so normal operation and failure recovery are unaffected.
 
 ---
 
@@ -244,7 +267,7 @@ kafka-practice/
 | One consumer group per service | Groups broadcast events to every service; one shared group would load-balance instead |
 | Commit offset after persistence | Committing first risks marking a message processed when the database write failed |
 | `event_id` UUID primary key + `ON CONFLICT DO NOTHING` | Makes at-least-once redelivery harmless; duplicates never create duplicate rows |
-| `StartOffset: FirstOffset` on fresh groups | New groups replay retained history; committed groups always resume from their offset regardless |
+| `StartOffset: FirstOffset` on fresh groups (`KAFKA_START_OFFSET`, default `first`) | New groups replay retained history from the beginning — or skip the backlog with `last`; committed groups always resume from their offset regardless |
 | Synchronous producer writes | Every publish waits for the broker ack — the durable baseline; batching/compression remain available for load experiments |
 | Single image, four binaries, Compose-selected command | One build, one image, minimal duplication across services |
 | Single broker, KRaft mode | Enough to exercise all consumer-side mechanics without multi-broker operational overhead |

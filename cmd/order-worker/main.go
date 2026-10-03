@@ -36,9 +36,11 @@ func main() {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers: []string{config.Get("KAFKA_BROKERS", "localhost:9092")},
 		Topic:   config.Get("KAFKA_TOPIC", "orders"),
-		// GroupID:     "order-processors",
-		GroupID:     "orders-processor",
-		StartOffset: kafka.FirstOffset,
+		// GroupID: "order-processors",
+		GroupID: "orders-processor",
+		// Applies ONLY to partitions with no committed offset (fresh group or
+		// clean test run). Groups with committed offsets always resume there.
+		StartOffset: config.StartOffset(),
 		MinBytes:    1,
 		MaxBytes:    10e6,
 	})
