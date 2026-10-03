@@ -32,6 +32,7 @@ func main() {
 		Balancer:     &kafka.Hash{},         //this gives us actual batching while still flushing quickly
 		BatchSize:    1,                     // or sized ≥ count
 		BatchTimeout: 10 * time.Millisecond, // flush fast instead of waiting 10s
+		Compression:  kafka.Snappy,          // compress batches before they hit the wire
 		Async:        false,                 // or keep sync but pass the whole slice. async me data was getting lost . reason -- With async writes, WriteMessages() can return before Kafka has acknowledged the messages. When your producer program exits, outstanding async writes may not all have completed.
 	}
 
